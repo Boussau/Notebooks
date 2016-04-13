@@ -3,12 +3,13 @@ from PIL import Image, ImageDraw
 import sys
 
 if (len(sys.argv) < 4):
-    print("\n\tUsage: python plotTransfersOnTree.py speciesTreeFile transferFile ")
+    print("\n\tUsage: python plotTransfersOnTree.py speciesTreeFile transferFile outputFile")
     print("\tWith speciesTreeFile a Newick tree with internal node names,")
     print("\tand transferFile a file containing transfers in the following format:")
     print("\tdonor1        receptor1        weight1")
     print("\tdonor2        receptor2        weight2")
-    print("\t...\n")
+    print("\t...")
+    print("\tand outputFile is the name of the output png file you want, without the png extension.\n")
     exit(-1)
 
 # Finds the coordinates of the node

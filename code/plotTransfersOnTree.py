@@ -2,7 +2,7 @@ from ete3 import Tree, TreeStyle, NodeStyle
 from PIL import Image, ImageDraw
 import sys
 
-if (len(sys.argv) < 3):
+if (len(sys.argv) < 4):
     print("\n\tUsage: python plotTransfersOnTree.py speciesTreeFile transferFile ")
     print("\tWith speciesTreeFile a Newick tree with internal node names,")
     print("\tand transferFile a file containing transfers in the following format:")
@@ -45,7 +45,6 @@ def plotSeveralOrientedTransfersOnTree (xyDonors, xyReceptors, amounts, imagedra
     transparencies = computeTransparencies (amounts)
     width = 5
     for i in range(len(xyDonors)-1, -1, -1):
-        print(transparencies[i])
         xyDonor = xyDonors[i]
         xyReceptor = xyReceptors[i]
         imagedraw.line((xyDonor[0],xyDonor[1], xyReceptor[0],xyReceptor[1]), fill=(255,0,0,transparencies[i]), width=width)
@@ -56,6 +55,7 @@ def plotSeveralOrientedTransfersOnTree (xyDonors, xyReceptors, amounts, imagedra
 
 treefile=sys.argv[1]
 transferfile=sys.argv[2]
+outputfile=sys.argv[3]
 
 try:
     f=open(treefile, 'r')
@@ -83,7 +83,7 @@ for n in t.traverse():
 
 #t.render("tree.png", tree_style=ts)
 
-coord = t.render("tree.png", tree_style=ts, w=183, units="mm")
+coord = t.render(outputfile+".png", tree_style=ts, w=183, units="mm")
 
 
 #coord = t.render("tree.png")
@@ -97,7 +97,7 @@ for node in t.traverse("postorder"):
 
 
 
-im = Image.open("tree.png")
+im = Image.open(outputfile+".png")
 
 draw = ImageDraw.Draw(im)
 
@@ -140,7 +140,7 @@ for l in f:
 
 f.close()
 
-im.save("treeWithTransfer.png", "png")
+im.save(outputfile+"WithTransfers.png", "png")
 
 
 #

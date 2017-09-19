@@ -1,3 +1,5 @@
+from ete3 import Tree
+import re
 
 def readTreeFromFile(file):
     try:
@@ -46,7 +48,9 @@ def readMAPChronogramFromRBOutputAndExtract95Hpd (file):
             # We are going to create a tree string with node indices
             # At the same time, we'll store 95% HPD along with the node indices.
             # We'll return the tree and a map between the node indices and the 95% HPD.
-            line2 = re.sub('\[&index=(\d+)]', '', line)
+#            line2 = re.sub('\[&index=(\d+)]', '', line)
+            line2 = re.sub('([^)])\[&index=(\d+)([,\w=\d,%\.\{\}])+\]', r'\g<1>', line)
+#            tree = re.sub('\[&index=(\d+)([,\w=\d,%\.\{\}])+\]', r'\g<1>', line2)#[&index=102,posterior=1.000000,ccp=1.000000,height_95%_HPD={0.025722,0.071446}]
             tree = re.sub('\[&index=(\d+)([,\w=\d,%\.\{\}])+\]', r'\g<1>', line2)#[&index=102,posterior=1.000000,ccp=1.000000,height_95%_HPD={0.025722,0.071446}]
             brackets = re.findall('\[&index=[,\w=\d,%\.\{\}]*\]', line2)
             idToHPD = dict()
@@ -126,6 +130,27 @@ def getNodeHeights( t ):
       # print node.name + " : " + str(node2Height[node])
     #return node2Height,id2Height
     return id2Height
+
+
+def getBranchLengths( t ):
+    node2Bl = dict()
+    id2Bl = dict()
+    for node in t.traverse("postorder"):
+        if node not in node2Bl:
+            node2Bl[node] = node.dist
+            id2Bl[node.support] = node.dist
+        if node.up:
+            if node.up.name =='':
+                leaves = node.up.get_leaves()
+                name=""
+                for l in leaves:
+                    name += l.name
+                node.up.name=name
+            node2Bl[node.up] = node.up.dist
+            id2Bl[str(int(node.up.support))] = node.up.dist
+      # print node.name + " : " + str(node2Height[node])
+    #return node2Height,id2Height
+    return id2Bl
 
 
 def plotAndComputeCorrelation(x,y,namex, namey, logyn, logxn, limx=None, limy=None):

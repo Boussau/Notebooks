@@ -1,4 +1,4 @@
-from ete3 import Tree, TreeStyle, NodeStyle
+from ete3 import Tree, TreeStyle, NodeStyle, AttrFace
 import math
 from PIL import Image, ImageDraw, ImageFont
 import sys
@@ -44,7 +44,7 @@ def plotAnEllipse(x, y, imagedraw):
 
 def plotConfidenceInterval(x0, x1, y, drawTrans):
     #imagedraw.line((x0,y, x1,y), fill=(0,0,255,128), width=4)
-    drawTrans.line((x0,y, x1,y), fill=(0,0,255,128), width=4)
+    drawTrans.line((x0, y, x1, y), fill=(0,0,255,128), width=4)
     #drawTrans.line((x0,y, x1,y), fill=(100), width=4)
     return
 
@@ -83,14 +83,15 @@ def plotTimeline(minX, maxX, y, minAge, maxAge, ticks, draw):
 
 
 
-if (len(sys.argv) != 7):
-    print("\n\tUsage: python plotChronogramWithNodeBars.py speciesTreeFile outputFile mint_timeline maxt_timeline every codefile\n")
+if (len(sys.argv) < 7):
+    print("\n\tUsage: python plotChronogramWithNodeBars.py speciesTreeFile outputFile mint_timeline maxt_timeline every codefile [xscale]\n")
     print("\tWith speciesTreeFile a NHX tree with internal node HPD interval (annotation age_quant_5_95),\n")
     print("\toutputFile is the name of the output png file you want, without the png extension,\n")
     print("\tmint_timeline is the minimum age to display on the timeline,\n")
     print("\tmaxt_timeline is the maximum age to display on the timeline,\n")
     print("\tevery is how often ticks will be put on the timeline,\n")
-    print("\tcodefile is file giving the correspondence between code names and full species names.\n")
+    print("\tcodefile is file giving the correspondence between code names and full species names,\n")
+    print("\t[xscale] is the optional scaling factor for branch lengths.\n")
     print("\t Instead, "+str(len(sys.argv))+" arguments were given.\n")
     exit(-1)
 
@@ -100,8 +101,11 @@ mint_timeline = float(sys.argv[3])
 maxt_timeline = float(sys.argv[4])
 every = float(sys.argv[5])
 codefile = sys.argv[6]
+scale = 0.3
+if len(sys.argv) >7:
+    scale = float(sys.argv[7])
 
-widthImage = 253
+widthImage = 2*253
 
 try:
     fco=open(codefile, 'r')
@@ -128,23 +132,49 @@ for l in f:
     lines = lines+l
 f.close()
 
-t = Tree( lines )
+last_comments = lines.rfind("[")
+#print(lines[0:last_comments]+";")
+t = Tree( lines[0:last_comments]+";" )
 #print(t)
+# Parse the node information for the root
+
+root_info = lines[last_comments:]
+median = float(root_info.split("age_median=")[1].split(":")[0])
+mean = float(root_info.split("age_mean=")[1].split("]")[0])
+sd = float(root_info.split("age_sd=")[1].split(":")[0])
+min = float(root_info.split("age_range={")[1].split("_")[0])
+max = float(root_info.split("age_range={")[1].split("_")[1].split("}")[0])
+ciMin = float(root_info.split("age_quant_5_95={")[1].split("_")[0])
+ciMax = float(root_info.split("age_quant_5_95={")[1].split("_")[1].split("}")[0])
+id = float(root_info.split("id=")[1].split(":")[0])
+t.add_features(support=1.0, age_median=median, age_mean=mean, age_sd=sd, age_range="{"+str(min)+"_"+str(max)+"}", age_quant_5_95="{"+str(ciMin)+"_"+str(ciMax)+"}", id=id)
 
 ts = TreeStyle()
 ts.min_leaf_separation= 0
 ts.show_scale=False
-ts.scale = 0.3  # 10 pixels per branch length unit
+ts.show_leaf_name = False
+ts.scale = scale #0.3 #0.1# 0.3  # 10 pixels per branch length unit
 nstyle = NodeStyle()
 nstyle["size"] = 0.0001
 for n in t.traverse():
     n.set_style(nstyle)
 
+for leaf in t:
+   leaf.add_face(AttrFace("name", fstyle="italic"), column=0, position='branch-right')
+
+
 #This first rendering is used to get _nid attributes for each node
 coord = t.render(outputfile+".png", tree_style=ts, w=widthImage, units="mm")
 
+def isfloat(value):
+  try:
+    float(value)
+    return True
+  except ValueError:
+    return False
+
 for node in t.traverse("postorder"):
-    if node.name == "":
+    if node.name == "" or isfloat(node.name):
         node.name = "Internal_"+str(node._nid)
     else:
         node.name = codeToName[node.name]
@@ -160,6 +190,7 @@ maxX = 0.0
 minX = 1000000.0
 minAge = 0.0
 maxAge = 0.0
+maxAgeConf = 0.0
 maxY = 0.0
 minY = 1000000.0
 for node in t.traverse("postorder"):
@@ -184,19 +215,26 @@ for node in t.traverse("postorder"):
         maxAge = age
     if age < minAge:
         minAge = age
+    if lowup[1] > maxAgeConf:
+        maxAgeConf = lowup[1]
 
 
+#print("maxAge: "+str(maxAge))
+#print("maxAgeConf: "+str(maxAgeConf))
 
 coord = t.render(outputfile+".png", tree_style=ts, w=widthImage, units="mm")
 
 im = Image.open(outputfile+".png")
 siz = im.size
-sizLarger = [siz[0],siz[1]+30]
+
+#enlarger = math.ceil(computeXCoordinate(minX, maxX, minAge, maxAge, int(maxAgeConf - maxAge)))
+enlarger = 600
+sizLarger = [siz[0]+enlarger,siz[1]+30]
 
 
 # For transparency
-mask=Image.new("RGBA", sizLarger, color=(0,0,0,0))
-drawTrans=ImageDraw.Draw(mask)
+#mask=Image.new("RGBA", sizLarger, color=(0,0,0,0))
+#drawTrans=ImageDraw.Draw(mask)
 
 offsetX = 0.0
 for node in t.traverse("postorder"):
@@ -209,23 +247,44 @@ for node in t.traverse("postorder"):
         upX = computeXCoordinate(minX, maxX, minAge, maxAge, lowup[1])
         if upX < offsetX:
             offsetX = upX
-        #print(upX, lowup[1])
-        plotConfidenceInterval(lowX, upX, xy[1], drawTrans)
-
+        #plotConfidenceInterval(lowX , upX , xy[1], drawTrans)
 offsetX = - math.ceil(offsetX)
+#print("offset: "+ str(offsetX))
+
+#offsetX = 300 #math.ceil(computeXCoordinate(minX, maxX, minAge, maxAgeConf, int(maxAgeConf - maxAge)))
+#print("offset: "+ str(offsetX))
+
 
 # Plotting the timeline
 y_timeline = sizLarger[1]-10
-minXTimeline = computeXCoordinate(minX, maxX, minAge, maxAge, mint_timeline) + offsetX
-maxXTimeline = computeXCoordinate(minX, maxX, minAge, maxAge, maxt_timeline) + offsetX
-ticks = getTickCoordinatesForTimeline(minX, maxX, minAge, maxAge, mint_timeline, maxt_timeline, every, offsetX)
+minXTimeline = computeXCoordinate(minX, maxX, minAge, maxAge, mint_timeline) + offsetX+int(enlarger/2) #+ enlarger
+maxXTimeline = computeXCoordinate(minX, maxX, minAge, maxAge, maxt_timeline) + offsetX+int(enlarger/2) #+ enlarger
+ticks = getTickCoordinatesForTimeline(minX, maxX, minAge, maxAge, mint_timeline, maxt_timeline, every, offsetX+int(enlarger/2))
+
+
 
 canvas = Image.new("RGB", (sizLarger[0]-offsetX, sizLarger[1]), color="white") #(1,1,1))
-canvas.paste(im, (offsetX, 0))#, 0.5)
+canvas.paste(im, (offsetX+int(enlarger/2), 0))#, 0.5)
 draw = ImageDraw.Draw(canvas)
 plotTimeline(minXTimeline, maxXTimeline, y_timeline, mint_timeline, maxt_timeline, ticks, draw)
 
-#canvas.paste(mask, None, mask=mask)#, 0.5)
-canvas.paste(mask, (offsetX, 0), mask=mask)#, 0.5)
+# For transparency
+mask=Image.new("RGBA", (sizLarger[0]-offsetX, sizLarger[1]), color=(0,0,0,0))
+drawTrans=ImageDraw.Draw(mask)
+
+
+for node in t.traverse("postorder"):
+    if not node.is_leaf():
+        nid = node._nid
+        xy = nodeIdToXY[nid]
+        #plotAnEllipse(xy[0], xy[1], draw)
+        lowup = nodeIdToLowup[node._nid]
+        lowX = computeXCoordinate(minX, maxX, minAge, maxAge, lowup[0]) + offsetX+int(enlarger/2)
+        upX = computeXCoordinate(minX, maxX, minAge, maxAge, lowup[1]) + offsetX+int(enlarger/2)
+        #plotAnEllipse(0+int(enlarger/2),  xy[1], drawTrans)
+        plotConfidenceInterval(lowX , upX , xy[1], drawTrans)
+
+
+canvas.paste(mask, (0, 0), mask=mask)  #, 0.5)
 
 canvas.save(outputfile+"WithIntervals.png", "png")

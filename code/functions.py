@@ -1,6 +1,29 @@
 
 
-## Returns dictionaries which map node ids to underlying tips, and vice versa
+## The two following functions return dictionaries which map node ids to underlying tips, and vice versa
+## First, if the nodes do not have names, we put names into the name and the support attributes:
+def createNameToLeavesLink( t ):
+    node2leaves = t.get_cached_content()
+    nodeId2LeafList = dict()
+    leafList2NodeId = dict()
+    nodeId = 0
+    for k in node2leaves.keys():
+        if len(node2leaves[k]) == 1: #leaf node
+            pass
+        else:
+            nodelist = list()
+            for n in node2leaves[k]:
+                nodelist.append( n.name )
+            nodelist.sort()
+            nodeId2LeafList[str(nodeId)] = nodelist
+            leafList2NodeId[tuple(nodelist)] = str(nodeId) # Need to transform the mutable list into an immutable tuple
+            k.name = str(float(nodeId))
+            k.support = str(nodeId)
+            nodeId = nodeId + 1
+    return nodeId2LeafList, leafList2NodeId
+
+
+## If the nodes have names:
 def getNameToLeavesLink( t ):
     node2leaves = t.get_cached_content()
     nodeId2LeafList = dict()
@@ -44,7 +67,7 @@ def getNodeHeights( t ):
         if node.up:
             node2Height[node.up] = node2Height[node] + node.dist
             id2Height[str(node.up.support)] = node2Height[node] + node.dist
-    # print node.name + " : " + str(node2Height[node])
+    #print (str(node.support) + " : " + str(node2Height[node]))
     return node2Height,id2Height
 
 
@@ -98,20 +121,27 @@ def compute95PcCredibilityIntervalWeightedDF(kItemdf):
     return mini, maxi
 
 
+def addRootNodeInformationToNhx(rootNodeString, treTxt):
+    t = treTxt.replace(";",rootNodeString)+"\n"
+    return t
+
 ## Function to write to file a Nexus tree with credibility intervals on its branches. Can be read by Figtree.
 ## WARNING: There shouldn't be any "0_" in the species names...
 def outputsWeightedChronogram (tre, id2Heights, outFileRadical, weights):
     unweightedAges = list()
-
+    rootNodeString=""
     for node in tre.traverse("postorder"):
         id = 0
         if node.name != "":
             id = node.name
         else:
             id = str(node.support)
+            node.name=id
+        node.id=id
+        print("Node: "+str(id)+" : "+ str(node.dist))
         v = list()
         for i in id2Heights:
-            v.append(i[id])
+            v.append(i[str(id)])
         median = np.median(v)
         sd = np.std(v)
         mean = np.mean(v)
@@ -121,15 +151,27 @@ def outputsWeightedChronogram (tre, id2Heights, outFileRadical, weights):
         ciMin = -1.0
         cMax = -1.0
         ciMin, ciMax = compute95PcCredibilityIntervalWeightedDF(dftempNoWeight)
-        node.add_features(support=1.0, age_median=median, age_mean=mean, age_sd=sd, age_range="{"+str(min)+","+str(max)+"}", age_quant_5_95="{"+str(ciMin)+","+str(ciMax)+"}")
+        node.add_features(support=1.0, age_median=median, age_mean=mean, age_sd=sd, age_range="{"+str(min)+","+str(max)+"}", age_quant_5_95="{"+str(ciMin)+","+str(ciMax)+"}", id=id)
+        if node.is_root():
+            rootNodeString = "[&&NHX:age_quant_5_95={"+str(ciMin)+"_"+str(ciMax)+"}:name="+node.name+":id="+node.id+":age_sd="+str(sd)+":dist="+str(0.0)+":age_range={"+str(min)+"_"+str(max)+"}:support=1.0:age_median="+str(median)+":age_mean="+str(mean)+"]:0.0 ;"
         children = node.get_children()
         for c in children:
             c.dist = node.age_median - c.age_median
         unweightedAges.append(median)
+        #print("Node: "+str(id)+" : "+ str(node.dist))
 
-    tre.write(features=[], outfile=outFileRadical+".nhx")
 
-    treFigTree = tre.write(features=[]).replace("&&NHX:", "&").replace(":age", ",age").replace(":name", ",name").replace(":support", ",support").replace(":dist", ",dist").replace("0_", "0,")
+    treTxt = tre.write(features=[])
+    treTxt = addRootNodeInformationToNhx(rootNodeString, treTxt)
+    try:
+        f=open(outFileRadical+".nhx", 'w')
+    except IOError:
+        print ("Unknown file: "+outFileRadical+".nhx")
+        sys.exit()
+    f.write(treTxt)
+    f.close()
+
+    treFigTree = treTxt.replace("&&NHX:", "&").replace(":age", ",age").replace(":name", ",name").replace(":id", ",id").replace(":support", ",support").replace(":dist", ",dist").replace("0_", "0,").replace("1_", "1,").replace("2_", "2,").replace("3_", "3,").replace("4_", "4,").replace("5_", "5,").replace("6_", "6,").replace("7_", "7,").replace("8_", "8,").replace("9_", "9,")
 
     fout = outFileRadical+".nxs"
 
@@ -156,4 +198,3 @@ def outputsWeightedChronogram (tre, id2Heights, outFileRadical, weights):
     f.write("\nEND;\n")
 
     f.close()
-

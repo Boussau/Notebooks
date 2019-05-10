@@ -45,21 +45,31 @@ def readMAPChronogramFromRBOutputAndExtract95Hpd (file):
     for l in f:
         if "tree TREE1 = [&R]" in l:
             line = l.replace("tree TREE1 = [&R]", "")
+            #print("line: "+line)
             # We are going to create a tree string with node indices
             # At the same time, we'll store 95% HPD along with the node indices.
             # We'll return the tree and a map between the node indices and the 95% HPD.
 #            line2 = re.sub('\[&index=(\d+)]', '', line)
-            line2 = re.sub('([^)])\[&index=(\d+)([,\w=\d,%\.\{\}])+\]', r'\g<1>', line)
+            line1 = re.sub('\[&index=(\d+)\]', "[&index=\g<1>,posterior=1.000000,age_95%_HPD={0.0,0.0}]", line)
+            #print("line1: "+line1)
+            line2 = re.sub('([^)])\[&index=(\d+)([,\w=\d,%\.\{\}])+\]', r'\g<1>', line1)
+            #print("line2: "+line2)
 #            tree = re.sub('\[&index=(\d+)([,\w=\d,%\.\{\}])+\]', r'\g<1>', line2)#[&index=102,posterior=1.000000,ccp=1.000000,height_95%_HPD={0.025722,0.071446}]
             tree = re.sub('\[&index=(\d+)([,\w=\d,%\.\{\}])+\]', r'\g<1>', line2)#[&index=102,posterior=1.000000,ccp=1.000000,height_95%_HPD={0.025722,0.071446}]
+            #print("tree: "+tree)
             brackets = re.findall('\[&index=[,\w=\d,%\.\{\}]*\]', line2)
             idToHPD = dict()
+            #print(brackets)
             for i in brackets:
                 index = re.findall('\[&index=(\d+)', i)
                 hpd = re.findall('age_95%_HPD={(\d+\.*\d*,\d+\.*\d*)}', i)
                 idToHPD[index[0]] = list()
-                idToHPD[index[0]].append(float(hpd[0].split(",")[0]))
-                idToHPD[index[0]].append(float(hpd[0].split(",")[1]))
+                if (len(hpd) > 0 ):
+                    idToHPD[index[0]].append(float(hpd[0].split(",")[0]))
+                    idToHPD[index[0]].append(float(hpd[0].split(",")[1]))
+                else:
+                    idToHPD[index[0]].append(0.0)
+                    idToHPD[index[0]].append(0.0)
             return Tree(tree), idToHPD
 
 ### The two following functions are used to number nodes in a tree according to another tree. This is necessary to compare node ages between two trees.
@@ -70,6 +80,7 @@ def getNameToLeavesLink( t ):
     leafList2NodeId = dict()
     for k in node2leaves.keys():
         if len(node2leaves[k]) == 1: #leaf node
+            #print("Leaf node " + str(node2leaves[k]))
             pass
         else:
             nodelist = list()
@@ -98,15 +109,20 @@ def renumberNodesAndUpdate95HPDAccordingly( treeToAnnotate, leafList2NodeId, idT
     newIdToHPD = dict()
     #print treeToAnnotate.get_ascii(attributes=[ "name"], show_internal=False)
     node2leaves = treeToAnnotate.get_cached_content()
+    #print("leafList2NodeId: " + str(leafList2NodeId))
     for k in node2leaves.keys():
+        #print(node2leaves[k])
         if len(node2leaves[k]) == 1: #leaf node
             pass
         else:
             nodelist = list()
             for n in node2leaves[k]: # for all the leaves in the subtree
+                #print("n.name : "+ n.name )
                 nodelist.append( n.name )
             nodelist.sort()
+            #print("tuple(nodelist): "+str(tuple(nodelist)))
             newName = leafList2NodeId[tuple(nodelist)]
+            #print(newName)
             newIdToHPD[newName] = idToHPD[str(int(k.support))]
             k.support = str(newName)
     return(newIdToHPD)
